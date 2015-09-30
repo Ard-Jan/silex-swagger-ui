@@ -4,9 +4,9 @@ namespace SwaggerUI\Silex\Provider;
 
 use Silex\Application;
 use Silex\ServiceProviderInterface;
-use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\File\File;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * The SwaggerUIServiceProvider adds views for swagger UI to a silex app, making
@@ -14,6 +14,41 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class SwaggerUIServiceProvider implements ServiceProviderInterface
 {
+    const FONT_MIME_TYPE = 'font/opentype';
+
+    const JS_MIME_TYPE = 'text/javascript';
+
+    const CSS_MIME_TYPE = 'text/css';
+
+    const IMAGE_MIME_TYPE = 'text/css';
+
+    const INDEX_FILE = 'index.html';
+
+    const HTML_MIME_TYPE = 'text/html';
+
+    const DEFAULT_DOCUMENT_URL = "http://petstore.swagger.io/v2/swagger.json";
+
+    /**
+     * @var string
+     */
+    private $rootDir;
+
+    /**
+     * File types
+     */
+    private $assetMimeTypes = [
+        'eot' => self::FONT_MIME_TYPE,
+        'svg' => self::FONT_MIME_TYPE,
+        'ttf' => self::FONT_MIME_TYPE,
+        'woff' => self::FONT_MIME_TYPE,
+        'woff2' => self::FONT_MIME_TYPE,
+        'js' => self::JS_MIME_TYPE,
+        'css' => self::CSS_MIME_TYPE,
+        'png' => self::IMAGE_MIME_TYPE,
+        'gif' => self::IMAGE_MIME_TYPE,
+        'html' => self::HTML_MIME_TYPE,
+    ];
+
     /**
      * Add routes to the swagger UI documentation browser
      *
@@ -21,45 +56,12 @@ class SwaggerUIServiceProvider implements ServiceProviderInterface
      */
     public function boot(Application $app)
     {
-        // Reference to $this, it's used for closure in anonymous function (PHP 5.3.x)
-        $self = &$this;
-        $app->get($app['swaggerui.path'], function(Request $request) use ($app) {
-            return str_replace(
-                array('{{swaggerui-root}}', '{{swagger-docs}}'),
-                array($request->getBasePath() . $app['swaggerui.path'], $request->getBasePath() . $app['swaggerui.apiDocPath']),
-                file_get_contents(__DIR__ . '/../../../../public/index.html')
-            );
-        });
-
-        $app->get($app['swaggerui.path'] . '/{resource}', function($resource) use ($app) {
-            $file = __DIR__ . '/../../../../public/' . $resource;
-            if (is_file($file)) {
-                return file_get_contents($file);
-            }
-
-            return '';
-        });
-
-        $app->get($app['swaggerui.path'] . '/lib/{resource}', function($resource) use ($app, $self) {
-            return $self->getFile(
-                __DIR__ . '/../../../../public/lib/' . $resource,
-                'text/javascript'
-            );
-        });
-
-        $app->get($app['swaggerui.path'] . '/css/{resource}', function($resource) use ($app, $self) {
-            return $self->getFile(
-                __DIR__ . '/../../../../public/css/' . $resource,
-                'text/css'
-            );
-        });
-
-        $app->get($app['swaggerui.path'] . '/images/{resource}', function($resource) use ($app, $self) {
-            return $self->getFile(
-                __DIR__ . '/../../../../public/images/' . $resource,
-                'image/png'
-            );
-        });
+        // Index route
+        $app->get($app['swaggerui.path'], array($this, 'getIndex'));
+        // Asset in the root directory
+        $app->get($app['swaggerui.assetsPath'] . '/{asset}', array($this, 'getAsset'));
+        // Assets in a folder
+        $app->get($app['swaggerui.assetsPath'] . '/{directory}/{asset}', array($this, 'getAssetFromDirectory'));
     }
 
     /**
@@ -67,23 +69,90 @@ class SwaggerUIServiceProvider implements ServiceProviderInterface
      *
      * @param Application $app
      */
-    public function register(Application $app) {}
+    public function register(Application $app)
+    {
+        $this->rootDir = __DIR__ . '/../../../../public/';
+    }
 
     /**
-     * Get a public file
+     * @param string $path Path to the file
      *
-     * @param string Path to file
-     * @param string Content-type
      * @return Response
      */
-    public function getFile($path, $contentType) {
+    public function getFile($path)
+    {
         if (is_file($path)) {
-            $response = new Response(file_get_contents($path));
-            $response->headers->set('Content-Type', $contentType);
+            $file = new File($path);
+            $fileContent = file_get_contents($path);
+            $response = new Response($fileContent);
+            $response->headers->set('Content-Type', $this->getContentType($file->getExtension()));
             $response->setCharset('UTF-8');
             return $response;
         }
 
-        return new Response('', 404);
+        return new Response('File not found', 404);
+    }
+
+    /**
+     * @param string $fileExtension
+     *
+     * @return mixed
+     * @throws \Exception
+     */
+    private function getContentType($fileExtension)
+    {
+        if (!isset($this->assetMimeTypes[$fileExtension])) {
+            throw new \Exception(sprintf('No mime type for file extension %s was found', $fileExtension));
+        }
+
+        return $this->assetMimeTypes[$fileExtension];
+    }
+
+    /**
+     * @param Request     $request
+     * @param Application $application
+     *
+     * @return Response
+     */
+    public function getIndex(Request $request, Application $application)
+    {
+        $file = $this->getFile(
+            $this->rootDir . static::INDEX_FILE
+        );
+
+        $content = str_replace(
+            static::DEFAULT_DOCUMENT_URL,
+            $request->getBasePath() . $application['swaggerui.docs'],
+            $file->getContent()
+        );
+
+        $file->setContent($content);
+
+        return $file;
+    }
+
+    /**
+     * @param string $asset
+     *
+     * @return Response
+     */
+    public function getAsset($asset)
+    {
+        return $this->getFile(
+            $this->rootDir . $asset
+        );
+    }
+
+    /**
+     * @param string $asset
+     * @param string $directory
+     *
+     * @return Response
+     */
+    public function getAssetFromDirectory($directory, $asset)
+    {
+        return $this->getFile(
+            $this->rootDir . $directory . DIRECTORY_SEPARATOR . $asset
+        );
     }
 }

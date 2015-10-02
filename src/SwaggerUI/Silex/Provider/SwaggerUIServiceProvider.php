@@ -56,12 +56,15 @@ class SwaggerUIServiceProvider implements ServiceProviderInterface
      */
     public function boot(Application $app)
     {
+        preg_match('/(\/.*)\/.*|(\/)/', $app['swaggerui.path'], $matches);
+        $assetsPath = (count($matches)) ? array_pop($matches) : $app['swaggerui.path'];
+
         // Index route
         $app->get($app['swaggerui.path'], array($this, 'getIndex'));
         // Asset in the root directory
-        $app->get($app['swaggerui.assetsPath'] . '/{asset}', array($this, 'getAsset'));
+        $app->get($assetsPath . '/{asset}', array($this, 'getAsset'));
         // Assets in a folder
-        $app->get($app['swaggerui.assetsPath'] . '/{directory}/{asset}', array($this, 'getAssetFromDirectory'));
+        $app->get($assetsPath . '/{directory}/{asset}', array($this, 'getAssetFromDirectory'));
     }
 
     /**

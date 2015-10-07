@@ -26,6 +26,8 @@ class SwaggerUIServiceProvider implements ServiceProviderInterface
 
     const HTML_MIME_TYPE = 'text/html';
 
+    const MAP_MIME_TYPE = 'application/json';
+
     const DEFAULT_DOCUMENT_URL = "http://petstore.swagger.io/v2/swagger.json";
 
     /**
@@ -47,6 +49,7 @@ class SwaggerUIServiceProvider implements ServiceProviderInterface
         'png' => self::IMAGE_MIME_TYPE,
         'gif' => self::IMAGE_MIME_TYPE,
         'html' => self::HTML_MIME_TYPE,
+        'map' => self::MAP_MIME_TYPE,
     ];
 
     /**
